@@ -1,0 +1,42 @@
+{
+  "lastCheck": "2025-06-18T12:18:03.253Z",
+  "overallStatus": "perfect",
+  "successRate": 100,
+  "checks": [
+    {
+      "endpoint": "/api/ai",
+      "status": "success",
+      "responseTime": 3250
+    },
+    {
+      "endpoint": "/api/wiki",
+      "status": "success",
+      "responseTime": 117
+    },
+    {
+      "endpoint": "/api/tdk",
+      "status": "success",
+      "responseTime": 778
+    },
+    {
+      "endpoint": "/api/currency",
+      "status": "success",
+      "responseTime": 160
+    },
+    {
+      "endpoint": "/api/earthquake/latest",
+      "status": "success",
+      "responseTime": 4234
+    },
+    {
+      "endpoint": "/api/movie",
+      "status": "success",
+      "responseTime": 72
+    },
+    {
+      "endpoint": "/api/yt",
+      "status": "success",
+      "responseTime": 31
+    }
+  ]
+}
