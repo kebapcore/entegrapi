@@ -1,0 +1,159 @@
+const { spawn } = await import('child_process');
+
+const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+
+// yt-dlp'den JSON veri al
+const getVideoInfo = (): Promise<any> => {
+  return new Promise((resolve, reject) => {
+    const ytdlp = spawn('yt-dlp', ['-j', videoUrl]);
+
+    let output = '';
+    ytdlp.stdout.on('data', (data) => {
+      output += data.toString();
+    });
+
+    ytdlp.stderr.on('data', (data) => {
+      console.error('yt-dlp stderr:', data.toString());
+    });
+
+    ytdlp.on('close', (code) => {
+      if (code === 0) {
+        try {
+          const parsed = JSON.parse(output);
+          resolve(parsed);
+        } catch (err) {
+          reject(new Error("JSON parse hatası: " + err));
+        }
+      } else {
+        reject(new Error(`yt-dlp kapanma kodu: ${code}`));
+      }
+    });
+
+    ytdlp.on('error', (err) => {
+      reject(err);
+    });
+  });
+};
+
+// video ve ses linki al
+const getDownloadUrls = (): Promise<{ mp4_url: string | null, mp3_url: string | null }> => {
+  return new Promise((resolve) => {
+    const ytdlp = spawn('yt-dlp', ['-g', '-f', 'bestvideo+bestaudio', videoUrl]);
+
+    let urlData = '';
+    ytdlp.stdout.on('data', (data) => {
+      urlData += data.toString();
+    });
+
+    ytdlp.stderr.on('data', (data) => {
+      console.error('yt-dlp stderr (urls):', data.toString());
+    });
+
+    ytdlp.on('close', (code) => {
+      if (code === 0 && urlData.trim()) {
+        const urls = urlData.trim().split('\n');
+        resolve({
+          mp4_url: urls[0] || null,
+          mp3_url: urls[1] || urls[0] || null
+        });
+      } else {
+        // fallback: sadece audio çek
+        const fallback = spawn('yt-dlp', ['-g', '-f', 'bestaudio', videoUrl]);
+        let audioUrl = '';
+
+        fallback.stdout.on('data', (data) => {
+          audioUrl += data.toString();
+        });
+
+        fallback.on('close', (code2) => {
+          resolve({
+            mp3_url: code2 === 0 && audioUrl.trim() ? audioUrl.trim() : null,
+            mp4_url: null
+          });
+        });
+
+        fallback.on('error', () => {
+          resolve({ mp3_url: null, mp4_url: null });
+        });
+      }
+    });
+
+    ytdlp.on('error', () => {
+      resolve({ mp3_url: null, mp4_url: null });
+    });
+  });
+};
+
+// süre formatlama
+const formatDuration = (seconds: number) => {
+  if (!seconds) return "Bilinmiyor";
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  return h > 0 ? `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}` : `${m}:${s.toString().padStart(2, '0')}`;
+};
+
+// izlenme formatlama
+const formatViewCount = (count: number) => {
+  if (!count) return "Bilinmiyor";
+  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
+  if (count >= 1_000) return `${(count / 1_000).toFixed(1)}K`;
+  return count.toString();
+};
+
+// çalıştırma kısmı
+try {
+  const [videoInfo, downloadUrls] = await Promise.all([
+    getVideoInfo(),
+    getDownloadUrls()
+  ]);
+
+  const responseData = {
+    video_id: videoId,
+    title: videoInfo.title || "Başlık bulunamadı",
+    description: videoInfo.description || "Açıklama bulunamadı",
+    duration: formatDuration(videoInfo.duration),
+    duration_seconds: videoInfo.duration || 0,
+
+    view_count: formatViewCount(videoInfo.view_count),
+    view_count_raw: videoInfo.view_count || 0,
+    like_count: videoInfo.like_count || 0,
+
+    upload_date: videoInfo.upload_date || "Bilinmiyor",
+    uploader: videoInfo.uploader || videoInfo.channel || "Bilinmiyor",
+
+    thumbnail: videoInfo.thumbnail || "",
+    webpage_url: videoInfo.webpage_url || videoUrl,
+
+    mp3_url: downloadUrls.mp3_url,
+    mp4_url: downloadUrls.mp4_url,
+    download_status: (downloadUrls.mp3_url || downloadUrls.mp4_url) ? "available" : "failed",
+
+    channel: {
+      id: videoInfo.channel_id || "Bilinmiyor",
+      name: videoInfo.channel || videoInfo.uploader || "Bilinmiyor",
+      url: videoInfo.channel_url || videoInfo.uploader_url || "",
+      subscriber_count: videoInfo.channel_follower_count || 0,
+      verified: videoInfo.channel_is_verified || false
+    },
+
+    resolution: videoInfo.resolution || "Bilinmiyor",
+    fps: videoInfo.fps || 0,
+    filesize: videoInfo.filesize || 0,
+    format_id: videoInfo.format_id || "Bilinmiyor",
+
+    categories: videoInfo.categories || [],
+    tags: videoInfo.tags || [],
+
+    age_restricted: videoInfo.age_limit ? videoInfo.age_limit > 0 : false,
+    age_limit: videoInfo.age_limit || 0,
+
+    extraction_method: "yt-dlp",
+    extracted_at: new Date().toISOString()
+  };
+
+  console.log(responseData); // veya return responseData;
+
+} catch (err) {
+  console.error("HATA:", err);
+}
